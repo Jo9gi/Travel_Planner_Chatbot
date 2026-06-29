@@ -9,7 +9,7 @@ def tavily_search(query: str, max_results: int = 5) -> str:
     client = TavilyClient(api_key=api_key)
 
     try:
-        response = client.search(query=query, search_depth="advanced", max_results=max_results, include_answer=True)
+        response = client.search(query=query, search_depth="basic", max_results=max_results, include_answer=True)
         parts = []
         # Tavily's top-level answer (fast summary)
         if response.get("answer"):

@@ -159,8 +159,13 @@ def generate_response(state: dict, mode: str, search_result: str = "") -> str:
     elif mode == "direct_answer" and search_result:
         context = (
             f"User asked: {user_msg}\n\n"
-            f"Real-time search results (use these, do not hallucinate):\n{search_result}\n\n"
-            f"Give a helpful, friendly answer based ONLY on the above search results."
+            f"Real-time search results:\n{search_result}\n\n"
+            f"CRITICAL RULES:\n"
+            f"1. GEOGRAPHICAL ACCURACY: Verify the exact city of the locations mentioned in the search results. "
+            f"If the search results suggest a place that is actually in a neighboring major city, explicitly clarify "
+            f"that it is a 'nearby drive' or 'in the neighboring city'. DO NOT claim it is physically inside the requested town.\n"
+            f"2. Do not invent beaches or sanctuaries where they do not exist.\n"
+            f"3. Give a helpful, friendly answer based on these filtered results."
         )
     else:
         context = f"User said: {user_msg}\nRespond as Tina, a friendly travel assistant."

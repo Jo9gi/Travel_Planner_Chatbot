@@ -14,6 +14,20 @@ NOMINATIM_URL = "https://nominatim.openstreetmap.org/search"
 HEADERS = {"User-Agent": "TinaTravelBot/1.0 (travel planning assistant)"}
 
 
+# Keywords that indicate low-quality / noisy POIs
+_NOISE_KEYWORDS = [
+    "colony", "nagar", "phase", "municipal", "muncipal", "ward",
+    "layout", "enclave", "sector", "block", "junction", "chowk",
+    "round", "circle", "ground", "under preparation", "statue",
+    "ntr", "ysr", "bjr", "ambedkar", "gandhi", "rajiv", "jagjivan",
+]
+
+def _is_quality_poi(name: str) -> bool:
+    """Return False if the POI name contains noise keywords."""
+    name_lower = name.lower()
+    return not any(kw in name_lower for kw in _NOISE_KEYWORDS)
+
+
 # Step 1: Get coordinates for a city 
 
 def geocode_city(city: str) -> dict:
@@ -45,11 +59,13 @@ def get_attractions(lat: float, lon: float, radius_km: int = 30) -> list:
     query = f"""
     [out:json][timeout:60];
     (
-      node["tourism"~"attraction|museum|viewpoint|artwork|zoo|theme_park"]
+      node["tourism"~"attraction|museum|viewpoint|zoo|theme_park"]
           (around:{radius_m},{lat},{lon});
-      node["historic"~"monument|castle|ruins|memorial"]
+      node["historic"~"monument|castle|ruins|memorial|archaeological_site"]
           (around:{radius_m},{lat},{lon});
-      node["leisure"~"park|nature_reserve|beach"]
+      node["leisure"~"nature_reserve|beach|water_park"]
+          (around:{radius_m},{lat},{lon});
+      node["amenity"~"place_of_worship|theatre|cinema"]
           (around:{radius_m},{lat},{lon});
     );
     out body 80;
@@ -64,7 +80,7 @@ def get_attractions(lat: float, lon: float, radius_km: int = 30) -> list:
         places = []
         for el in elements:
             name = el.get("tags", {}).get("name")
-            if not name:
+            if not name or not _is_quality_poi(name):
                 continue
             place_lat = el.get("lat")
             place_lon = el.get("lon")
