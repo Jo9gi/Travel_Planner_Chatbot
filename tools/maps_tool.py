@@ -1,23 +1,20 @@
 """
-tools/maps_tool.py
-------------------
 Uses Nominatim (geocoding) + Overpass API (POI lookup)
 to find and cluster nearby attractions for day planning.
 No API key needed — both are free OpenStreetMap services.
 """
-
 import requests
 import time
 from geopy.distance import geodesic
 
 
-OVERPASS_URL = "http://overpass-api.de/api/interpreter"
+OVERPASS_URL = "https://overpass-api.de/api/interpreter"
 NOMINATIM_URL = "https://nominatim.openstreetmap.org/search"
 
 HEADERS = {"User-Agent": "TinaTravelBot/1.0 (travel planning assistant)"}
 
 
-# ── Step 1: Get coordinates for a city ───────────────────────────────────────
+# Step 1: Get coordinates for a city 
 
 def geocode_city(city: str) -> dict:
     """Return lat/lon for a city name using Nominatim."""
@@ -37,18 +34,16 @@ def geocode_city(city: str) -> dict:
     return {"error": "City not found"}
 
 
-# ── Step 2: Fetch tourist attractions via Overpass ───────────────────────────
+# Step 2: Fetch tourist attractions via Overpass
 
-def get_attractions(lat: float, lon: float, radius_km: int = 20) -> list:
-    """
-    Query Overpass for tourist attractions around a coordinate.
-    Returns a list of places with name, lat, lon, type.
-    """
+def get_attractions(lat: float, lon: float, radius_km: int = 30) -> list:
+    """Query Overpass for tourist attractions around a coordinate.
+    Returns a list of places with name, lat, lon, type."""
     radius_m = radius_km * 1000
 
     # Overpass QL — fetch tourism nodes and ways
     query = f"""
-    [out:json][timeout:30];
+    [out:json][timeout:60];
     (
       node["tourism"~"attraction|museum|viewpoint|artwork|zoo|theme_park"]
           (around:{radius_m},{lat},{lon});
@@ -57,11 +52,13 @@ def get_attractions(lat: float, lon: float, radius_km: int = 20) -> list:
       node["leisure"~"park|nature_reserve|beach"]
           (around:{radius_m},{lat},{lon});
     );
-    out body 40;
+    out body 80;
     """
 
     try:
-        resp = requests.post(OVERPASS_URL, data=query, timeout=30)
+        resp = requests.post(OVERPASS_URL, data={"data": query}, headers=HEADERS, timeout=90)
+        if resp.status_code != 200 or not resp.text.strip():
+            return [{"error": f"Overpass API error: status={resp.status_code}, body={resp.text[:200]}"}]
         elements = resp.json().get("elements", [])
 
         places = []
@@ -86,15 +83,11 @@ def get_attractions(lat: float, lon: float, radius_km: int = 20) -> list:
     except Exception as e:
         return [{"error": str(e)}]
 
-
-# ── Step 3: Cluster places by proximity into day groups ──────────────────────
-
+# Step 3: Cluster places by proximity into day groups 
 def cluster_by_proximity(places: list, num_days: int) -> list[list]:
-    """
-    Simple greedy clustering: group nearby places together so each
+    """Simple greedy clustering: group nearby places together so each
     day's plan minimises travel distance.
-    Returns a list of groups, one per day.
-    """
+    Returns a list of groups, one per day."""
     if not places:
         return []
 
@@ -122,11 +115,8 @@ def cluster_by_proximity(places: list, num_days: int) -> list[list]:
             # Find closest unvisited place to the last in group
             closest = min(
                 remaining,
-                key=lambda p: geodesic(
-                    (last["lat"], last["lon"]),
-                    (p["lat"], p["lon"])
-                ).km
-            )
+                key=lambda p: geodesic((last["lat"], last["lon"]), (p["lat"], p["lon"])).km
+                        )
             group.append(closest)
             remaining.remove(closest)
 
@@ -139,8 +129,7 @@ def cluster_by_proximity(places: list, num_days: int) -> list[list]:
     return groups
 
 
-# ── Main entry point used by Day Planner agent ───────────────────────────────
-
+# ── Main entry point used by Day Planner agent 
 def build_day_clusters(city: str, num_days: int) -> str:
     """
     Full pipeline: geocode → fetch attractions → cluster by day.
@@ -172,3 +161,6 @@ def build_day_clusters(city: str, num_days: int) -> str:
         lines.append("")
 
     return "\n".join(lines)
+
+if __name__ == "__main__":
+    print(build_day_clusters("vizag", 5))

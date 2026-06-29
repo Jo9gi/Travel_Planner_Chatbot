@@ -1,24 +1,7 @@
-"""
-agents/day_planner.py
----------------------
-Day Planner agent.
-Uses Nominatim + Overpass API to cluster nearby attractions
-into a logical day-by-day itinerary.
-Called after Destination Researcher in Mode 3.
-"""
-
 from tools.maps_tool import build_day_clusters
 
-
 def day_planner(state: dict) -> dict:
-    """
-    Builds a geo-clustered day plan:
-    - Fetches real POIs from OpenStreetMap (Overpass)
-    - Groups nearby places together per day
-    - Returns a structured itinerary text
 
-    Updates state with 'day_plan'.
-    """
     destination = state.get("destination", "")
     days = state.get("days", 3)
 

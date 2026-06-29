@@ -1,19 +1,7 @@
-"""
-tools/tavily_tool.py
---------------------
-Wraps Tavily search for quick travel Q&A.
-Used by: Supervisor (Mode 1) and Destination Researcher (Mode 3).
-"""
-
 import os
 from tavily import TavilyClient
 
-
 def tavily_search(query: str, max_results: int = 5) -> str:
-    """
-    Search the web via Tavily and return a clean text summary.
-    Always returns real-time data — no hallucination.
-    """
     api_key = os.getenv("TAVILY_API_KEY")
     if not api_key or api_key == "your_tavily_api_key_here":
         return "Error: TAVILY_API_KEY is not configured."
@@ -21,15 +9,8 @@ def tavily_search(query: str, max_results: int = 5) -> str:
     client = TavilyClient(api_key=api_key)
 
     try:
-        response = client.search(
-            query=query,
-            search_depth="advanced",
-            max_results=max_results,
-            include_answer=True,          
-        )
-
+        response = client.search(query=query, search_depth="advanced", max_results=max_results, include_answer=True)
         parts = []
-
         # Tavily's top-level answer (fast summary)
         if response.get("answer"):
             parts.append(f"Summary: {response['answer']}")

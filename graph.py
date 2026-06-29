@@ -1,16 +1,5 @@
-"""
-graph.py
---------
-LangGraph StateGraph for Tina.
-
-Flow:
-  supervisor → (end | destination_researcher → day_planner → hotel_researcher → finalize)
-
-Memory: MemorySaver checkpoints the full state per thread_id,
-        so Tina remembers the whole conversation.
-"""
-
 from typing import TypedDict, Optional, List
+from concurrent.futures import ThreadPoolExecutor
 from langgraph.graph import StateGraph, END
 from langgraph.checkpoint.memory import MemorySaver
 
@@ -29,7 +18,8 @@ class TinaState(TypedDict):
     # Trip details (filled progressively by supervisor)
     destination: Optional[str]
     days: Optional[int]
-    budget: Optional[str]
+    budget: Optional[str]        # "budget", "mid-range", "luxury"
+    exact_budget: Optional[str]  # e.g., "10000 INR", "$500"
 
     # Agent outputs
     destination_info: Optional[str]
@@ -43,14 +33,30 @@ class TinaState(TypedDict):
     response: Optional[str]
 
 
+# ── Parallel runner node ─────────────────────────────────────────────────────
+
+def parallel_researchers(state: TinaState) -> dict:
+    """Run all 3 research agents simultaneously using threads."""
+    with ThreadPoolExecutor(max_workers=3) as executor:
+        f_dest  = executor.submit(destination_researcher, state)
+        f_day   = executor.submit(day_planner, state)
+        f_hotel = executor.submit(hotel_researcher, state)
+
+        dest_result  = f_dest.result()
+        day_result   = f_day.result()
+        hotel_result = f_hotel.result()
+
+    return {
+        **state,
+        "destination_info": dest_result.get("destination_info"),
+        "day_plan":         day_result.get("day_plan"),
+        "hotel_info":       hotel_result.get("hotel_info"),
+    }
+
+
 # ── Routing function ──────────────────────────────────────────────────────────
 
 def route_after_supervisor(state: TinaState) -> str:
-    """
-    Read state['next'] and decide which node to go to.
-    'run_agents' → start the sequential planning pipeline
-    'end'        → done, return to user
-    """
     return state.get("next", "end")
 
 
@@ -61,9 +67,7 @@ def build_graph():
 
     # Register all nodes
     graph.add_node("supervisor", supervisor)
-    graph.add_node("destination_researcher", destination_researcher)
-    graph.add_node("day_planner", day_planner)
-    graph.add_node("hotel_researcher", hotel_researcher)
+    graph.add_node("parallel_researchers", parallel_researchers)
     graph.add_node("finalize_plan", finalize_plan)
 
     # Entry point
@@ -74,15 +78,12 @@ def build_graph():
         "supervisor",
         route_after_supervisor,
         {
-            "run_agents": "destination_researcher",   # full plan → agents
-            "end": END,                               # simple answer → done
+            "run_agents": "parallel_researchers",
+            "end": END,
         }
     )
 
-    # Sequential agent pipeline
-    graph.add_edge("destination_researcher", "day_planner")
-    graph.add_edge("day_planner", "hotel_researcher")
-    graph.add_edge("hotel_researcher", "finalize_plan")
+    graph.add_edge("parallel_researchers", "finalize_plan")
     graph.add_edge("finalize_plan", END)
 
     # Compile with memory (MemorySaver = in-memory checkpointing per thread_id)
@@ -120,6 +121,9 @@ def chat(user_message: str, thread_id: str, current_state: dict = None) -> tuple
         "messages": messages,
         "response": None,
         "next": None,
+        "destination_info": None,
+        "day_plan": (current_state or {}).get("day_plan"),
+        "hotel_info": None,
     }
 
     # Run the graph
